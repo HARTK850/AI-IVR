@@ -3,43 +3,42 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 module.exports = async (req, res) => {
-  // 1. חובה: הגדרת כותרת שמבהירה לימות המשיח שזה טקסט נקי בעברית
+  // חובה: הגדרת כותרת כדי שימות המשיח יבינו את העברית
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
 
   const query = req.method === 'POST' ? req.body : req.query;
-  
-  // קליטת הטקסט (תומך גם בפרמטר שחוזר מזיהוי דיבור וגם בבדיקות ידניות)
-  let userText = query.ApiAnswer || query.text;
 
-  console.log("Request received. Text:", userText);
+  // קליטת הטקסט שהוקלד (אנחנו נקרא למשתנה UserText)
+  let userText = query.UserText;
+
+  console.log("Input received:", userText);
 
   try {
-    // 2. אם זו הכניסה הראשונה לשלוחה (אין טקסט)
+    // 1. אם אין טקסט (כניסה ראשונה), נבקש להקליד
     if (!userText) {
-      console.log("Welcome message");
-      // שולחים רק את הטקסט להקראה. ההקלטה תתבצע בגלל ההגדרות ב-ext.ini
-      return res.status(200).send('read=t-שלום, אני גמיני. על מה תרצו לדבר איתי?'); 
+      // הסיומת =UserText היא הקריטית! היא אומרת למערכת לחכות לקלט
+      return res.status(200).send('read=t-שלום, אני גמיני. אנא הקלידו את שאלתכם וסיימו בסולמית.=UserText'); 
     }
 
-    // 3. יש טקסט מהמשתמש - שליחה לגוגל
+    // 2. אם המשתמש הקליד משהו - שולחים לגוגל
+    // הערה: הקלדה בימות המשיח היא בדרך כלל מספרים, אלא אם מוגדרת המרת מקשים לאותיות
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    
+    // מוסיפים הנחיה למודל שידע שמדובר בטקסט קצר או מספרים אם זה המצב
     const result = await model.generateContent(userText);
     const response = await result.response;
     
-    // ניקוי הטקסט מתשובת ה-AI
     let textResponse = response.text()
-        .replace(/\*/g, '')      // הסרת כוכביות
-        .replace(/=/g, '-')      // החלפת שווה במקף (קריטי לימות המשיח!)
-        .replace(/&/g, 'ו')      // החלפת & ב'ו'
-        .replace(/\n/g, '. ');   // החלפת ירידת שורה בנקודה
+        .replace(/\*/g, '')      // ניקוי כוכביות
+        .replace(/=/g, '-')      // החלפת שווה במקף (חובה!)
+        .replace(/&/g, 'ו')
+        .replace(/\n/g, '. ');
 
-    console.log("Gemini reply:", textResponse);
-
-    // שליחת התשובה
-    return res.status(200).send(`read=t-${textResponse}`);
+    // 3. מחזירים תשובה ומבקשים את הקלט הבא
+    return res.status(200).send(`read=t-${textResponse}=UserText`);
 
   } catch (error) {
     console.error("Error:", error);
-    return res.status(200).send('read=t-אירעה שגיאה, אנא נסו שוב.');
+    return res.status(200).send('read=t-אירעה שגיאה, נסו שוב.=UserText');
   }
 };
